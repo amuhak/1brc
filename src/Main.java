@@ -54,14 +54,10 @@ public class Main {
             service.shutdownNow();
         }
 
-        for (HashMap<String, value> result : results) {
-            for (String key : result.keySet()) {
+        for (final HashMap<String, value> result : results) {
+            for (final String key : result.keySet()) {
                 value v = result.get(key);
-                if (map.containsKey(key)) {
-                    map.get(key).update(v.sum, v.min, v.max, v.n);
-                } else {
-                    map.put(key, new value(v.sum, v.min, v.max, v.n));
-                }
+                map.computeIfAbsent(key, _ -> new value(v.sum, v.min, v.max, v.n)).update(v.sum, v.min, v.max, v.n);
             }
         }
 
@@ -106,7 +102,7 @@ public class Main {
         }
 
         public void run() {
-            byte[] buffer = new byte[BUFFER_SIZE + BUFFER_SIZE / 8];
+            byte[] buffer = new byte[BUFFER_SIZE + (BUFFER_SIZE >> 8)];
             int len = 0;
             try {
                 var file = new RandomAccessFile(FILE_PATH, "r");
@@ -145,11 +141,9 @@ public class Main {
                 if (neg) {
                     no = -no;
                 }
-                if (map.containsKey(name)) {
-                    map.get(name).update(no);
-                } else {
-                    map.put(name, new value(no));
-                }
+                int finalNo = no;
+
+                map.computeIfAbsent(name, _ -> new value(finalNo)).update(no);
             }
         }
     }
