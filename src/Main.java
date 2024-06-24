@@ -3,14 +3,15 @@ import org.graalvm.collections.Pair;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
     private static final String FILE_PATH = "measurements.txt";
     private static final int BUFFER_SIZE = 1 << 23;
-    private static final ConcurrentHashMap<String, value> map = new ConcurrentHashMap<>();
+    private static final HashMap<String, value> map = new HashMap<>();
 
     public static void main(String[] args) throws Exception {
         long start = System.currentTimeMillis();
@@ -21,6 +22,7 @@ public class Main {
 
         ArrayList<Pair<Long, Long>> toDo = new ArrayList<>();
         long to;
+
         for (long i = 0; i < length - 1; i = to) {
             to = Math.min(i + BUFFER_SIZE, length - 1);
             file.seek(to);
@@ -30,21 +32,37 @@ public class Main {
             toDo.add(Pair.create(i, to));
         }
 
-        // System.out.println(toDo.size());
-
         int noThreads = Runtime.getRuntime().availableProcessors();
 
         ExecutorService service =
                 new ThreadPoolExecutor(noThreads, noThreads, 1L, java.util.concurrent.TimeUnit.SECONDS,
                         new java.util.concurrent.LinkedBlockingQueue<>());
-
+        ArrayList<HashMap<String, value>> results = new ArrayList<>();
         for (Pair<Long, Long> pair : toDo) {
-            service.submit(new Worker(pair.getLeft(), pair.getRight()));
+            HashMap<String, value> result = new HashMap<>();
+            results.add(result);
+            service.submit(new Worker(pair.getLeft(), pair.getRight(), result));
         }
 
         service.shutdown();
-        while (!service.isTerminated()) {
 
+        if (!service.awaitTermination(5, TimeUnit.MINUTES)) {
+            System.err.println("""
+                    Threads didn't finish in 5 minutes!\s
+                     Something is seriously wrong!\s
+                     Shutting down!""");
+            service.shutdownNow();
+        }
+
+        for (HashMap<String, value> result : results) {
+            for (String key : result.keySet()) {
+                value v = result.get(key);
+                if (map.containsKey(key)) {
+                    map.get(key).update(v.sum, v.min, v.max, v.n);
+                } else {
+                    map.put(key, new value(v.sum, v.min, v.max, v.n));
+                }
+            }
         }
 
         ArrayList<Pair<String, value>> list = new ArrayList<>();
@@ -58,8 +76,14 @@ public class Main {
         sb.append("{");
         for (Pair<String, value> pair : list) {
             value v = pair.getRight();
-            sb.append(pair.getLeft()).append("=").append(v.min / 10.0).append("/").append(
-                    Math.round(v.sum / (double) v.n) / 10.0).append("/").append(v.max / 10.0).append(", ");
+            sb.append(pair.getLeft())
+                    .append("=")
+                    .append(v.min / 10.0)
+                    .append("/")
+                    .append(Math.round(v.sum / (double) v.n) / 10.0)
+                    .append("/")
+                    .append(v.max / 10.0)
+                    .append(", ");
         }
         sb.setLength(sb.length() - 2);
         sb.append("}");
@@ -73,10 +97,12 @@ public class Main {
     static class Worker implements Runnable {
         long i;
         long to;
+        HashMap<String, value> map;
 
-        public Worker(long i, long to) {
+        public Worker(long i, long to, HashMap<String, value> map) {
             this.i = i;
             this.to = to;
+            this.map = map;
         }
 
         public void run() {
@@ -141,11 +167,25 @@ public class Main {
             this.n = 1;
         }
 
-        public synchronized void update(int val) {
+        public value(long sum, int min, int max, int n) {
+            this.sum = sum;
+            this.min = min;
+            this.max = max;
+            this.n = n;
+        }
+
+        public void update(int val) {
             sum += val;
             min = Math.min(min, val);
             max = Math.max(max, val);
             n++;
+        }
+
+        private void update(long sum, int min, int max, int n) {
+            this.sum += sum;
+            this.min = Math.min(this.min, min);
+            this.max = Math.max(this.max, max);
+            this.n += n;
         }
     }
 }
