@@ -112,8 +112,8 @@ public class Main {
                 int delta = (int) (to - i);
                 len = file.read(buffer, 0, delta);
                 buffer[len] = '\n';
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Exception _) {
+
             }
             for (int j = 0; j < len; j++) {
                 if (buffer[j] == '\n') {
