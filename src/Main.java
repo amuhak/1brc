@@ -4,6 +4,7 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -55,8 +56,9 @@ public class Main {
         }
 
         for (final HashMap<String, value> result : results) {
-            for (final String key : result.keySet()) {
-                value v = result.get(key);
+            for (final Map.Entry<String, value> in : result.entrySet()) {
+                final String key = in.getKey();
+                final value v = in.getValue();
                 map.computeIfAbsent(key, _ -> new value(v.sum, v.min, v.max, v.n)).update(v.sum, v.min, v.max, v.n);
             }
         }
