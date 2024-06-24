@@ -4,10 +4,12 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
-public class test {
+public class Test {
     private static final String FILE_PATH = "measurements.txt";
-    private static final int BUFFER_SIZE = 1 << 17;
+    private static final int BUFFER_SIZE = 1 << 24;
     private static final ConcurrentHashMap<String, value> map = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws Exception {
@@ -30,16 +32,20 @@ public class test {
 
         System.out.println("Here");
 
-        toDo.stream().parallel().forEach(pair -> {
-            long i = pair.getLeft();
-            long too = pair.getRight();
-            try {
-                new test().execute(i, too);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+        int noThreads = Runtime.getRuntime().availableProcessors();
 
+        ExecutorService service =
+                new ThreadPoolExecutor(noThreads, noThreads, 1L, java.util.concurrent.TimeUnit.SECONDS,
+                        new java.util.concurrent.LinkedBlockingQueue<>());
+
+        for (Pair<Long, Long> pair : toDo) {
+            service.submit(new Worker(pair.getLeft(), pair.getRight()));
+        }
+
+        service.shutdown();
+        while (!service.isTerminated()) {
+
+        }
 
         ArrayList<Pair<String, value>> list = new ArrayList<>();
         for (String key : map.keySet()) {
@@ -64,45 +70,60 @@ public class test {
         System.out.println("Time taken: " + (end - start) + "ms");
     }
 
-    public void execute(long i, long to) throws Exception {
-        var file = new RandomAccessFile(FILE_PATH, "r");
-        byte[] buffer = new byte[BUFFER_SIZE * 2];
-        file.seek(i);
-        int delta = (int) (to - i);
-        int len = file.read(buffer, 0, delta);
-        buffer[len] = '\n';
-        for (int j = 0; j < len; j++) {
-            if (buffer[j] == '\n') {
-                continue;
+    static class Worker implements Runnable {
+        long i;
+        long to;
+
+        public Worker(long i, long to) {
+            this.i = i;
+            this.to = to;
+        }
+
+        public void run() {
+            byte[] buffer = new byte[BUFFER_SIZE * 2];
+            int len = 0;
+            try {
+                var file = new RandomAccessFile(FILE_PATH, "r");
+                file.seek(i);
+                int delta = (int) (to - i);
+                len = file.read(buffer, 0, delta);
+                buffer[len] = '\n';
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-            int start = j;
-            while (buffer[j] != ';') {
-                j++;
-            }
-            String name = new String(buffer, start, j - start);
-            j++;
-            int no = 0;
-            boolean neg = false;
-            if (buffer[j] == '-') {
-                neg = true;
-                j++;
-            }
-            while (buffer[j] != '\n') {
-                if (buffer[j] == '.') {
-                    j++;
+            for (int j = 0; j < len; j++) {
+                if (buffer[j] == '\n') {
                     continue;
                 }
-                no *= 10;
-                no += buffer[j] - '0';
+                int start = j;
+                while (buffer[j] != ';') {
+                    j++;
+                }
+                String name = new String(buffer, start, j - start);
                 j++;
-            }
-            if (neg) {
-                no = -no;
-            }
-            if (map.containsKey(name)) {
-                map.get(name).update(no);
-            } else {
-                map.put(name, new value(no));
+                int no = 0;
+                boolean neg = false;
+                if (buffer[j] == '-') {
+                    neg = true;
+                    j++;
+                }
+                while (buffer[j] != '\n') {
+                    if (buffer[j] == '.') {
+                        j++;
+                        continue;
+                    }
+                    no *= 10;
+                    no += buffer[j] - '0';
+                    j++;
+                }
+                if (neg) {
+                    no = -no;
+                }
+                if (map.containsKey(name)) {
+                    map.get(name).update(no);
+                } else {
+                    map.put(name, new value(no));
+                }
             }
         }
     }
