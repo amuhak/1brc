@@ -96,7 +96,7 @@ public class Main {
                     .append(v.max / 10.0)
                     .append(", ");
         }
-        // sb.setLength(sb.length() - 2);
+        sb.setLength(sb.length() - 2);
         sb.append("}");
         System.out.println(sb);
 
