@@ -142,31 +142,28 @@ public class Main {
                 bArr name = new bArr(Arrays.copyOfRange(buffer, start, j));
 
                 j++;
-                int no = 0;
-                boolean neg = false;
+
+                final int no;
 
                 if (buffer[j] == '-') {
-                    neg = true;
-                    j++;
-                }
-
-                while (buffer[j] != '\n') {
-                    if (buffer[j] == '.') {
-                        j++;
-                        continue;
+                    if (buffer[j + 2] == '.') {
+                        no = (((buffer[j + 1] - '0') * 10) + (buffer[j + 3] - '0')) * -1;
+                        j += 3;
+                    } else {
+                        no = ((buffer[j + 1] - '0') * 100 + (buffer[j + 2] - '0') * 10 + (buffer[j + 4] - '0')) * -1;
+                        j += 4;
                     }
-                    no *= 10;
-                    no += buffer[j] - '0';
-                    j++;
+                } else {
+                    if (buffer[j + 1] == '.') {
+                        no = ((buffer[j] - '0') * 10) + (buffer[j + 2] - '0');
+                        j += 2;
+                    } else {
+                        no = ((buffer[j] - '0') * 100 + (buffer[j + 1] - '0') * 10 + (buffer[j + 3] - '0'));
+                        j += 3;
+                    }
                 }
 
-                if (neg) {
-                    no = -no;
-                }
-
-                final int finalNo = no;
-
-                map.computeIfAbsent(name, _ -> new value(finalNo)).update(no);
+                map.computeIfAbsent(name, _ -> new value(no)).update(no);
             }
 
             bufferQueue.add(buffer);
