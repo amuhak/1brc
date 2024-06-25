@@ -2,9 +2,11 @@ import org.graalvm.collections.Pair;
 
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -13,6 +15,9 @@ public class Main {
     private static final String FILE_PATH = "measurements.txt";
     private static final int BUFFER_SIZE = 1 << 23;
     private static final HashMap<String, value> map = new HashMap<>();
+    public static byte[][] buffer;
+    public static ConcurrentLinkedQueue<byte[]> bufferQueue = new ConcurrentLinkedQueue<>();
+    public static ConcurrentLinkedQueue<RandomAccessFile> fileQueue = new ConcurrentLinkedQueue<>();
 
     public static void main(String[] args) throws Exception {
         long start = System.currentTimeMillis();
@@ -34,6 +39,14 @@ public class Main {
         }
 
         int noThreads = Runtime.getRuntime().availableProcessors();
+
+        // 1.25 times the buffer size for headroom
+        buffer = new byte[noThreads + (noThreads / 4)][BUFFER_SIZE + (BUFFER_SIZE >> 8)];
+        bufferQueue.addAll(Arrays.asList(buffer));
+
+        for (int i = 0; i < noThreads + (noThreads / 4); i++) {
+            fileQueue.add(new RandomAccessFile(FILE_PATH, "r"));
+        }
 
         ExecutorService service =
                 new ThreadPoolExecutor(noThreads, noThreads, 1L, java.util.concurrent.TimeUnit.SECONDS,
@@ -83,7 +96,7 @@ public class Main {
                     .append(v.max / 10.0)
                     .append(", ");
         }
-        sb.setLength(sb.length() - 2);
+        // sb.setLength(sb.length() - 2);
         sb.append("}");
         System.out.println(sb);
 
@@ -104,10 +117,10 @@ public class Main {
         }
 
         public void run() {
-            byte[] buffer = new byte[BUFFER_SIZE + (BUFFER_SIZE >> 8)];
+            byte[] buffer = bufferQueue.poll();
+            var file = fileQueue.poll();
             int len = 0;
             try {
-                var file = new RandomAccessFile(FILE_PATH, "r");
                 file.seek(i);
                 int delta = (int) (to - i);
                 len = file.read(buffer, 0, delta);
@@ -120,17 +133,21 @@ public class Main {
                     continue;
                 }
                 int start = j;
+
                 while (buffer[j] != ';') {
                     j++;
                 }
+
                 String name = new String(buffer, start, j - start);
                 j++;
                 int no = 0;
                 boolean neg = false;
+
                 if (buffer[j] == '-') {
                     neg = true;
                     j++;
                 }
+
                 while (buffer[j] != '\n') {
                     if (buffer[j] == '.') {
                         j++;
@@ -140,13 +157,18 @@ public class Main {
                     no += buffer[j] - '0';
                     j++;
                 }
+
                 if (neg) {
                     no = -no;
                 }
-                int finalNo = no;
+
+                final int finalNo = no;
 
                 map.computeIfAbsent(name, _ -> new value(finalNo)).update(no);
             }
+
+            bufferQueue.add(buffer);
+            fileQueue.add(file);
         }
     }
 
