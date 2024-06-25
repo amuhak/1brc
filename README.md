@@ -2,7 +2,7 @@ Tested with Java 22 on https://www.graalvm.org/
 
 Requires graalvm due to the pair class.
 
-My code runs in about 7.2 seconds on my machine.
+My code runs in about 6.5 seconds on my machine.
 The fastest Code I could run on my system ran in Time: 4066ms
 [Link](https://github.com/gunnarmorling/1brc/blob/main/src/main/java/dev/morling/onebrc/CalculateAverage_gonix.java)
 

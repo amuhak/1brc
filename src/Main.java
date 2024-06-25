@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 public class Main {
     private static final String FILE_PATH = "measurements.txt";
     private static final int BUFFER_SIZE = 1 << 23;
-    private static final HashMap<String, value> map = new HashMap<>();
+    private static final HashMap<bArr, value> map = new HashMap<>();
     public static byte[][] buffer;
     public static ConcurrentLinkedQueue<byte[]> bufferQueue = new ConcurrentLinkedQueue<>();
     public static ConcurrentLinkedQueue<RandomAccessFile> fileQueue = new ConcurrentLinkedQueue<>();
@@ -51,9 +51,9 @@ public class Main {
         ExecutorService service =
                 new ThreadPoolExecutor(noThreads, noThreads, 1L, java.util.concurrent.TimeUnit.SECONDS,
                         new java.util.concurrent.LinkedBlockingQueue<>());
-        ArrayList<HashMap<String, value>> results = new ArrayList<>();
+        ArrayList<HashMap<bArr, value>> results = new ArrayList<>();
         for (Pair<Long, Long> pair : toDo) {
-            HashMap<String, value> result = new HashMap<>();
+            HashMap<bArr, value> result = new HashMap<>();
             results.add(result);
             service.submit(new Worker(pair.getLeft(), pair.getRight(), result));
         }
@@ -68,17 +68,17 @@ public class Main {
             service.shutdownNow();
         }
 
-        for (final HashMap<String, value> result : results) {
-            for (final Map.Entry<String, value> in : result.entrySet()) {
-                final String key = in.getKey();
+        for (final HashMap<bArr, value> result : results) {
+            for (final Map.Entry<bArr, value> in : result.entrySet()) {
+                final bArr key = in.getKey();
                 final value v = in.getValue();
                 map.computeIfAbsent(key, _ -> new value(v.sum, v.min, v.max, v.n)).update(v.sum, v.min, v.max, v.n);
             }
         }
 
         ArrayList<Pair<String, value>> list = new ArrayList<>();
-        for (String key : map.keySet()) {
-            list.add(Pair.create(key, map.get(key)));
+        for (bArr key : map.keySet()) {
+            list.add(Pair.create(new String(key.arr), map.get(key)));
         }
 
         list.sort(Comparator.comparing(Pair::getLeft));
@@ -108,9 +108,9 @@ public class Main {
     static class Worker implements Runnable {
         long i;
         long to;
-        HashMap<String, value> map;
+        HashMap<bArr, value> map;
 
-        public Worker(long i, long to, HashMap<String, value> map) {
+        public Worker(long i, long to, HashMap<bArr, value> map) {
             this.i = i;
             this.to = to;
             this.map = map;
@@ -125,8 +125,8 @@ public class Main {
                 int delta = (int) (to - i);
                 len = file.read(buffer, 0, delta);
                 buffer[len] = '\n';
-            } catch (Exception _) {
-
+            } catch (Exception e) {
+                e.printStackTrace();
             }
             for (int j = 0; j < len; j++) {
                 if (buffer[j] == '\n') {
@@ -138,7 +138,9 @@ public class Main {
                     j++;
                 }
 
-                String name = new String(buffer, start, j - start);
+                // String name = new String(buffer, start, j - start);
+                bArr name = new bArr(Arrays.copyOfRange(buffer, start, j));
+
                 j++;
                 int no = 0;
                 boolean neg = false;
@@ -204,6 +206,24 @@ public class Main {
             this.min = Math.min(this.min, min);
             this.max = Math.max(this.max, max);
             this.n += n;
+        }
+    }
+
+    public static class bArr {
+        byte[] arr;
+
+        public bArr(byte[] arr) {
+            this.arr = arr;
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(arr);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return Arrays.equals(arr, ((bArr) obj).arr);
         }
     }
 }
