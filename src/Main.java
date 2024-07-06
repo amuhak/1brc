@@ -1,10 +1,12 @@
-import org.graalvm.collections.Pair;
+import org.graalvm.collections.Pair; // This is used for convenience. A custom pair would be trivial to implement
 
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -15,18 +17,15 @@ public class Main {
     private static final String FILE_PATH = "measurements.txt";
     private static final int BUFFER_SIZE = 1 << 23;
     private static final HashMap<bArr, value> map = new HashMap<>();
-    public static byte[][] buffer;
-    public static ConcurrentLinkedQueue<byte[]> bufferQueue = new ConcurrentLinkedQueue<>();
-    public static ConcurrentLinkedQueue<RandomAccessFile> fileQueue = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<byte[]> bufferQueue = new ConcurrentLinkedQueue<>();
+    private static final ConcurrentLinkedQueue<RandomAccessFile> fileQueue = new ConcurrentLinkedQueue<>();
 
     public static void main(String[] args) throws Exception {
         long start = System.currentTimeMillis();
-        final long length;
         RandomAccessFile file = new RandomAccessFile(FILE_PATH, "r");
+        final long length = file.length();
 
-        length = file.length();
-
-        ArrayList<Pair<Long, Long>> toDo = new ArrayList<>();
+        final List<Pair<Long, Long>> toDo = Collections.synchronizedList(new ArrayList<>());
         long to;
 
         for (long i = 0; i < length - 1; i = to) {
@@ -38,19 +37,22 @@ public class Main {
             toDo.add(Pair.create(i, to));
         }
 
-        int noThreads = Runtime.getRuntime().availableProcessors();
+        fileQueue.add(file);
 
-        // 1.25 times the buffer size for headroom
-        buffer = new byte[noThreads + (noThreads / 4)][BUFFER_SIZE + (BUFFER_SIZE >> 8)];
+        final int noThreads = Runtime.getRuntime().availableProcessors();
+
+        // Headroom is given to help smooth transitions between threads
+        final byte[][] buffer = new byte[noThreads + Math.max(1, noThreads / 8)][BUFFER_SIZE + (BUFFER_SIZE >> 8)];
         bufferQueue.addAll(Arrays.asList(buffer));
 
-        for (int i = 0; i < noThreads + (noThreads / 4); i++) {
+        for (int i = 0; i < noThreads + Math.max(2, noThreads / 8) - 1; i++) {
             fileQueue.add(new RandomAccessFile(FILE_PATH, "r"));
         }
 
         ExecutorService service =
                 new ThreadPoolExecutor(noThreads, noThreads, 1L, java.util.concurrent.TimeUnit.SECONDS,
-                        new java.util.concurrent.LinkedBlockingQueue<>());
+                        new java.util.concurrent.LinkedBlockingQueue<>()); // Thread pool
+
         ArrayList<HashMap<bArr, value>> results = new ArrayList<>();
         for (Pair<Long, Long> pair : toDo) {
             HashMap<bArr, value> result = new HashMap<>();
@@ -73,17 +75,19 @@ public class Main {
                 final bArr key = in.getKey();
                 final value v = in.getValue();
                 map.computeIfAbsent(key, _ -> new value(v.sum, v.min, v.max, v.n)).update(v.sum, v.min, v.max, v.n);
+                // Double adding is fine, as everything is double added, so the average should be the same
             }
         }
 
-        ArrayList<Pair<String, value>> list = new ArrayList<>();
-        for (bArr key : map.keySet()) {
+
+        final ArrayList<Pair<String, value>> list = new ArrayList<>();
+        for (final bArr key : map.keySet()) {
             list.add(Pair.create(new String(key.arr), map.get(key)));
         }
 
         list.sort(Comparator.comparing(Pair::getLeft));
 
-        StringBuilder sb = new StringBuilder();
+        final StringBuilder sb = new StringBuilder();
         sb.append("{");
         for (Pair<String, value> pair : list) {
             value v = pair.getRight();
@@ -128,6 +132,7 @@ public class Main {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+
             for (int j = 0; j < len; j++) {
                 if (buffer[j] == '\n') {
                     continue;
@@ -138,27 +143,28 @@ public class Main {
                     j++;
                 }
 
-                // String name = new String(buffer, start, j - start);
                 bArr name = new bArr(Arrays.copyOfRange(buffer, start, j));
 
                 j++;
 
                 final int no;
 
+                // Magic numbers come from subtracting various '0' values
+
                 if (buffer[j] == '-') {
                     if (buffer[j + 2] == '.') {
-                        no = (((buffer[j + 1] - '0') * 10) + (buffer[j + 3] - '0')) * -1;
+                        no = (buffer[j + 1] * 10 + buffer[j + 3] - 0x210) * -1;
                         j += 3;
                     } else {
-                        no = ((buffer[j + 1] - '0') * 100 + (buffer[j + 2] - '0') * 10 + (buffer[j + 4] - '0')) * -1;
+                        no = (buffer[j + 1] * 100 + buffer[j + 2] * 10 + buffer[j + 4] - 0x14d0) * -1;
                         j += 4;
                     }
                 } else {
                     if (buffer[j + 1] == '.') {
-                        no = ((buffer[j] - '0') * 10) + (buffer[j + 2] - '0');
+                        no = buffer[j] * 10 + buffer[j + 2] - 0x210;
                         j += 2;
                     } else {
-                        no = ((buffer[j] - '0') * 100 + (buffer[j + 1] - '0') * 10 + (buffer[j + 3] - '0'));
+                        no = buffer[j] * 100 + buffer[j + 1] * 10 + buffer[j + 3] - 0x14d0;
                         j += 3;
                     }
                 }
