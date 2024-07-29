@@ -1,4 +1,4 @@
-import org.graalvm.collections.Pair; // This is used for convenience. A custom pair would be trivial to implement
+import org.graalvm.collections.Pair;
 
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
@@ -74,8 +74,10 @@ public class Main {
             for (final Map.Entry<bArr, value> in : result.entrySet()) {
                 final bArr key = in.getKey();
                 final value v = in.getValue();
-                map.computeIfAbsent(key, _ -> new value(v.sum, v.min, v.max, v.n)).update(v.sum, v.min, v.max, v.n);
-                // Double adding is fine, as everything is double added, so the average should be the same
+                map.merge(key, new value(v.sum, v.min, v.max, v.n), (existingValue, newValue) -> {
+                    existingValue.update(newValue.sum, newValue.min, newValue.max, newValue.n);
+                    return existingValue;
+                });
             }
         }
 
@@ -143,7 +145,9 @@ public class Main {
                     j++;
                 }
 
-                bArr name = new bArr(Arrays.copyOfRange(buffer, start, j));
+                byte[] temp = new byte[j - start];
+                System.arraycopy(buffer, start, temp, 0, j - start);
+                bArr name = new bArr(temp);
 
                 j++;
 
@@ -169,7 +173,10 @@ public class Main {
                     }
                 }
 
-                map.computeIfAbsent(name, _ -> new value(no)).update(no);
+                map.merge(name, new value(no), (existingValue, _) -> {
+                    existingValue.update(no);
+                    return existingValue;
+                });
             }
 
             bufferQueue.add(buffer);
